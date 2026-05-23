@@ -9,11 +9,11 @@ class ReplitPgHandler:
         Initializes connection parameters by reading directly from 
         the system environment variables provided by the platform.
         """
-        self.user = os.environ.get('DB_USER')
-        self.password = os.environ.get('DB_PASSWORD')
-        self.host = os.environ.get('DB_HOST')
-        self.port = os.environ.get('DB_PORT', '5432')
-        self.database = os.environ.get('DB_NAME')
+        self.user = os.environ.get('DB_USER') or os.environ.get('PGUSER')
+        self.password = os.environ.get('DB_PASSWORD') or os.environ.get('PGPASSWORD')
+        self.host = os.environ.get('DB_HOST') or os.environ.get('PGHOST')
+        self.port = os.environ.get('DB_PORT') or os.environ.get('PGPORT', '5432')
+        self.database = os.environ.get('DB_NAME') or os.environ.get('PGDATABASE')
         
         # Verify that mandatory configuration items exist
         if not all([self.user, self.password, self.host, self.database]):
