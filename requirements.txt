@@ -4,10 +4,4 @@ psycopg2-binary==2.9.9
 sqlalchemy==2.0.30
 fastapi==0.111.0
 uvicorn==0.30.1
-fastapi
-feedparser
-pandas
-psycopg2-binary
-sqlalchemy
-uvicorn
-gunicorn
+gunicorn==22.0.0

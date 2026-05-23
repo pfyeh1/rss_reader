@@ -7,14 +7,18 @@ from db_handler import ReplitPgHandler
 app = FastAPI(title="DIY Feedly Engine API")
 db = ReplitPgHandler()
 
-# Allow open resource access configurations (CORS) for external frontend applications
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class NewFeedRequest(BaseModel):
+    source_name: str
+    rss_url: HttpUrl
 
 
 @app.get("/api/articles")
@@ -24,7 +28,7 @@ def read_latest_articles():
     feeds sorted chronologically by publication time stamp.
     """
     query = """
-        SELECT a.id, a.title, a.link, a.summary, a.published_at, s.source_name 
+        SELECT a.id, a.title, a.link, a.summary, a.published_at, s.source_name
         FROM articles a
         JOIN rss_sources s ON a.source_id = s.id
         ORDER BY a.published_at DESC NULLS LAST
@@ -33,14 +37,11 @@ def read_latest_articles():
     df = db.read_sql_to_pd(query)
 
     if df is None:
-        return {
-            "error": "Failed to read data matrix components from remote database server."
-        }
+        raise HTTPException(status_code=500, detail="Failed to read articles from database.")
 
     if df.empty:
         return []
 
-    # Safely transform complex datetime timestamp objects into standard text strings for JSON transfer
     if "published_at" in df.columns:
         df["published_at"] = df["published_at"].astype(str)
 
@@ -50,24 +51,18 @@ def read_latest_articles():
 @app.post("/api/feeds")
 def add_new_feed(feed_data: NewFeedRequest):
     """
-    Accepts a new feed from a web request, processes it into a DataFrame,
-    and pushes it directly into the database.
+    Accepts a new feed source, validates it, and inserts it into the database.
     """
-    # Extract validated string values from our Pydantic model
     record = {"source_name": feed_data.source_name, "rss_url": str(feed_data.rss_url)}
-
-    # Wrap in a list and convert to a Pandas DataFrame
     df_new_feed = pd.DataFrame([record])
 
     try:
-        # Write directly to our relational source table
         db.write_df_to_psql("rss_sources", df_new_feed, if_exists="append")
         return {
             "status": "success",
             "message": f"Successfully registered {feed_data.source_name}",
         }
-    except Exception as e:
-        # If the URL already exists, our database UNIQUE constraint blocks it and drops here
+    except Exception:
         raise HTTPException(
             status_code=400,
             detail="Failed to insert feed. The URL might already be registered.",
@@ -76,5 +71,5 @@ def add_new_feed(feed_data: NewFeedRequest):
 
 @app.get("/api/health")
 def health_status_check():
-    """Confirms operational baseline responsiveness state for checking web server layer health."""
+    """Confirms the web server is online and responsive."""
     return {"status": "online", "engine": "FastAPI Full-Stack System Active"}
