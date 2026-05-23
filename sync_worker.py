@@ -1,5 +1,6 @@
 import feedparser
 import pandas as pd
+from sqlalchemy import text as sqlalchemy_text
 from db_handler import ReplitPgHandler
 
 _FETCH_TIMEOUT_SECONDS = 10
@@ -46,11 +47,9 @@ def run_sync_cycle():
 
     df_incoming = pd.DataFrame(all_scouted_articles)
     df_incoming = df_incoming.drop_duplicates(subset=["link"])
-
-    # Convert timestamps before upsert
     df_incoming["published_at"] = pd.to_datetime(df_incoming["published_at"], errors="coerce")
 
-    # Use DB-level conflict handling to skip duplicates — avoids full table scan
+    # Use DB-level conflict handling to skip duplicates — avoids a full table scan
     engine = db.generate_engine()
     inserted = 0
     skipped = 0
@@ -83,9 +82,6 @@ def run_sync_cycle():
 
     print(f"Cycle completed. Inserted {inserted} new articles, skipped {skipped} duplicates.")
 
-
-# Import here to keep it at module level but avoid circular confusion
-from sqlalchemy import text as sqlalchemy_text
 
 if __name__ == "__main__":
     run_sync_cycle()
