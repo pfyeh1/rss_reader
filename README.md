@@ -16,7 +16,8 @@ A personal project prototyping a self-hosted RSS reader using Python, FastAPI, a
 | `POST`     | `/form`       | 
 
 ## Testing
-
+* Method 1: preview the app in Replit. Open new tab, copy the Url and type /docs to access the Swagger UI
+* Open web browser and paste Replit app url and append /api/articles at the end.
 
 ## Further Reading
 
