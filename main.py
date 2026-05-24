@@ -7,6 +7,15 @@ from google import genai
 from google.genai import types
 from db_handler import ReplitPgHandler
 
+# Replit AI Integrations — managed Gemini service (no personal API key required)
+_gemini_client = genai.Client(
+    api_key=os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY"),
+    http_options={
+        "api_version": "",
+        "base_url": os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL"),
+    },
+)
+
 app = FastAPI(title="DIY Feedly Engine API")
 db = ReplitPgHandler()
 
@@ -18,24 +27,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-gemini_api_key = os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY")
-gemini_base_url = os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL")
-
-if not gemini_api_key:
-    raise RuntimeError("AI_INTEGRATIONS_GEMINI_API_KEY must be set.")
-if not gemini_base_url:
-    raise RuntimeError("AI_INTEGRATIONS_GEMINI_BASE_URL must be set.")
-
 
 class NewFeedRequest(BaseModel):
     source_name: str
     rss_url: HttpUrl
-
-
-client = genai.Client(
-    api_key=gemini_api_key,
-    http_options={"base_url": gemini_base_url,
-                  "api_version":"")
 
 
 @app.get("/api/ai_summary")
@@ -68,17 +63,16 @@ def generate_ai_summary():
     )
 
     try:
-        response = client.models.generate_content(
+        response = _gemini_client.models.generate_content(
             model="gemini-2.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
                 temperature=0.3,
+                max_output_tokens=8192,
             ),
         )
         return {"status": "success", "ai_summary": response.text}
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI processing failed: {str(e)}")
 
@@ -99,9 +93,7 @@ def read_latest_articles():
     df = db.read_sql_to_pd(query)
 
     if df is None:
-        raise HTTPException(
-            status_code=500, detail="Failed to read articles from database."
-        )
+        raise HTTPException(status_code=500, detail="Failed to read articles from database.")
 
     if df.empty:
         return []

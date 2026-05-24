@@ -10,3 +10,4 @@ google-genai==1.68.0
 google-genai
 pydantic
 sift-stack-py
+google-genai
