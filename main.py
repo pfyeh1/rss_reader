@@ -3,27 +3,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
 import pandas as pd
-from db_handler import ReplitPgHandler
 from google import genai
-
-gemini_api_key = os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY")
-gemini_base_url = os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL")
-
-if not gemini_api_key:
-    raise RuntimeError("AI_INTEGRATIONS_GEMINI_API_KEY must be set.")
-if not gemini_base_url:
-    raise RuntimeError("AI_INTEGRATIONS_GEMINI_BASE_URL must be set.")
-
-client = genai.Client(
-    api_key=gemini_api_key,
-    http_options={"base_url": gemini_base_url, "api_version": ""},
-)
-
+from google.genai import types
+from db_handler import ReplitPgHandler
 
 app = FastAPI(title="DIY Feedly Engine API")
 db = ReplitPgHandler()
-ai_client = genai.Client()
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,6 +24,18 @@ class NewFeedRequest(BaseModel):
     rss_url: HttpUrl
 
 
+def _get_gemini_client():
+    """Lazily builds and returns a configured Gemini client, raising HTTP 503 if not configured."""
+    api_key = os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY")
+    base_url = os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Gemini API key is not configured.")
+    http_options = {"api_version": ""}
+    if base_url:
+        http_options["base_url"] = base_url
+    return genai.Client(api_key=api_key, http_options=http_options)
+
+
 @app.get("/api/ai_summary")
 def generate_ai_summary():
     """
@@ -50,9 +47,9 @@ def generate_ai_summary():
         FROM articles a
         JOIN rss_sources s ON a.source_id = s.id
         ORDER BY a.published_at DESC NULLS LAST
-        LIMIT 20; -- limiting to 20 for testing purposes
-         """
-    
+        LIMIT 20;
+    """
+
     df = db.read_sql_to_pd(query)
     if df is None or df.empty:
         raise HTTPException(status_code=500, detail="No articles found.")
@@ -61,30 +58,30 @@ def generate_ai_summary():
     for _, row in df.iterrows():
         content += f"Source: {row['source_name']}\nTitle: {row['title']}\nSnippet: {row['summary']}\n---\n"
 
-    prompt = f"""
-            Analyze the following recent news items and provide a unified, structured execuive briefing:\n\n{content}."""
+    prompt = f"Analyze the following recent news items and provide a unified, structured executive briefing:\n\n{content}."
 
     system_instruction = (
-        "You are an executive assistant. Your task is to summarize the latest news in a concise, bulleted format that a busy executive can consume in an email without scrolling."
+        "You are an executive assistant. Your task is to summarize the latest news "
+        "in a concise, bulleted format that a busy executive can consume in an email without scrolling."
     )
 
+    client = _get_gemini_client()
     try:
-        response = ai_client.generate_content(
-                model = "gemini-2.5-flash",
-                contents = prompt,
-                config=types.GenerateContentConfig(
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
-                temperature=0.3, # Low temperature ensures the model sticks strictly to your database text
-            )
+                temperature=0.3,
+            ),
         )
-
-        return {
-             "status": "success",
-             "ai_summary":response.text
-         }   
-    except Exception as e
+        return {"status": "success", "ai_summary": response.text}
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI processing failed: {str(e)}")
-        
+
+
 @app.get("/api/articles")
 def read_latest_articles():
     """
@@ -101,9 +98,7 @@ def read_latest_articles():
     df = db.read_sql_to_pd(query)
 
     if df is None:
-        raise HTTPException(
-            status_code=500, detail="Failed to read articles from database."
-        )
+        raise HTTPException(status_code=500, detail="Failed to read articles from database.")
 
     if df.empty:
         return []
