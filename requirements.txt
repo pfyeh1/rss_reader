@@ -13,3 +13,4 @@ sift-stack-py
 google-genai
 google-genai
 google-genai
+google-genai
