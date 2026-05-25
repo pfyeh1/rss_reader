@@ -1,6 +1,6 @@
 # DIY Feedly Aggregator Backend
 
-A personal project prototyping a self-hosted RSS reader using Python, FastAPI, and PostgreSQL deployed on Replit.
+A personal project prototyping a serverless RSS reader using Python, FastAPI, and PostgreSQL deployed on Replit.
 
 ## How to Run for the first time
 1. Seed the database: `python seed_feeds.py`
